@@ -159,6 +159,37 @@ export interface PageRenderResult {
   viewport: PdfjsViewport
 }
 
+/**
+ * 渲染单页缩略图到指定宽度的离屏 Canvas
+ * 按目标 CSS 像素宽度等比缩放，DPR 最高限制为 2，兼顾清晰度与内存开销。
+ * 输出 canvas 的 style 宽高由调用方按展示位置设置（或直接挂载到固定宽度容器）。
+ */
+export async function renderPageThumbnail(
+  page: PdfjsPage,
+  baseWidth: number,
+  baseHeight: number,
+  targetCssWidth: number,
+): Promise<{ canvas: HTMLCanvasElement; cssWidth: number; cssHeight: number }> {
+  const scale = targetCssWidth / baseWidth
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  canvas.width = Math.floor(viewport.width * dpr)
+  canvas.height = Math.floor(viewport.height * dpr)
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(dpr, dpr)
+  // 部分 PDF 页面背景透明，先铺白底，避免深色界面下缩略图发暗
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, viewport.width, viewport.height)
+  await page.render({ canvasContext: ctx, viewport }).promise
+  return {
+    canvas,
+    cssWidth: Math.round(viewport.width),
+    // 用原始宽高比计算展示高度，viewport 取整误差不会导致纸张比例漂移
+    cssHeight: Math.round(targetCssWidth * (baseHeight / baseWidth)),
+  }
+}
+
 /** 预加载（等待 PDF.js 就绪） */
 export async function preloadPdfjs(): Promise<void> {
   await ensureReady()

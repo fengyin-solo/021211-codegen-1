@@ -98,6 +98,16 @@
     </header>
 
     <main class="pdf-main">
+      <ThumbnailPanel
+        v-if="pdfDoc && !loading"
+        :key="`thumbs-${docKey}`"
+        :pdf-doc="pdfDoc"
+        :total-pages="totalPages"
+        :current-page="currentVisiblePage"
+        :scale="scale"
+        :page-base-dims="pageBaseDims"
+        @navigate="goToPage"
+      />
       <aside class="search-panel" v-if="showSearchPanel && searchResult.totalMatches > 0">
         <div class="search-panel__header">
           <span class="search-panel__title">搜索结果</span>
@@ -191,6 +201,7 @@ import {
   type PdfjsDocument, type PdfjsPage, type PdfjsViewport,
   type SearchResult, type SearchMatch, type PageSearchResult,
 } from '@/utils/pdf-engine'
+import ThumbnailPanel from './ThumbnailPanel.vue'
 
 const sampleFiles = [
   { name: 'sample.pdf', label: '示例一：学术论文' },
@@ -208,6 +219,8 @@ const fileName = ref('')
 const currentVisiblePage = ref(1)
 const toastMsg = ref('')
 const toastType = ref<'success' | 'error' | 'info'>('info')
+/** 每次成功打开新文档自增，用于强制缩略图栏按新文档完全重建 */
+const docKey = ref(0)
 
 const containerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -449,6 +462,17 @@ function jumpToMatch(match: SearchMatch) {
   refreshHighlights()
 }
 
+/* ---- 缩略图导航：点击缩略图跳到对应页 ---- */
+function goToPage(n: number) {
+  const wrapper = pageWrapperRefs.get(n)
+  if (!wrapper || !containerRef.value) return
+  // 与列表布局一致：.pdf-pages 顶部 padding 24px、页间距 16px
+  containerRef.value.scrollTo({
+    top: Math.max(0, wrapper.offsetTop - 24),
+    behavior: 'smooth',
+  })
+}
+
 function togglePageGroup(pageNumber: number) {
   if (expandedPages.has(pageNumber)) {
     expandedPages.delete(pageNumber)
@@ -686,10 +710,12 @@ async function loadPdf(url: string) {
     pdfDoc.value = doc
     totalPages.value = doc.numPages
     currentVisiblePage.value = 1
+    docKey.value++
     await precomputePageDimensions()
     loading.value = false
     showToast(`加载成功，共 ${doc.numPages} 页`, 'success')
     await nextTick()
+    containerRef.value?.scrollTo({ top: 0 })
     setTimeout(scheduleRender, 50)
   } catch (e: unknown) {
     loading.value = false
