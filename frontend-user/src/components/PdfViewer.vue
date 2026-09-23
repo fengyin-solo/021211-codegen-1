@@ -98,6 +98,15 @@
     </header>
 
     <main class="pdf-main">
+      <ThumbnailPanel
+        v-if="pdfDoc && !loading"
+        :key="docKey"
+        :pdf-doc="pdfDoc"
+        :total-pages="totalPages"
+        :page-base-dims="pageBaseDims"
+        :current-page="currentVisiblePage"
+        @jump="jumpToPage"
+      />
       <aside class="search-panel" v-if="showSearchPanel && searchResult.totalMatches > 0">
         <div class="search-panel__header">
           <span class="search-panel__title">搜索结果</span>
@@ -191,6 +200,7 @@ import {
   type PdfjsDocument, type PdfjsPage, type PdfjsViewport,
   type SearchResult, type SearchMatch, type PageSearchResult,
 } from '@/utils/pdf-engine'
+import ThumbnailPanel from '@/components/ThumbnailPanel.vue'
 
 const sampleFiles = [
   { name: 'sample.pdf', label: '示例一：学术论文' },
@@ -206,6 +216,8 @@ const loading = ref(false)
 const errorMsg = ref('')
 const fileName = ref('')
 const currentVisiblePage = ref(1)
+/** 每成功打开一个文档自增，用于强制缩略图栏整体重新生成 */
+const docKey = ref(0)
 const toastMsg = ref('')
 const toastType = ref<'success' | 'error' | 'info'>('info')
 
@@ -449,6 +461,15 @@ function jumpToMatch(match: SearchMatch) {
   refreshHighlights()
 }
 
+/** 点击缩略图：跳转到对应页（页顶与容器顶部对齐） */
+function jumpToPage(pageNumber: number) {
+  const wrapper = pageWrapperRefs.get(pageNumber)
+  const c = containerRef.value
+  if (!wrapper || !c) return
+  const relTop = wrapper.getBoundingClientRect().top - c.getBoundingClientRect().top
+  c.scrollTo({ top: c.scrollTop + relTop, behavior: 'smooth' })
+}
+
 function togglePageGroup(pageNumber: number) {
   if (expandedPages.has(pageNumber)) {
     expandedPages.delete(pageNumber)
@@ -686,6 +707,7 @@ async function loadPdf(url: string) {
     pdfDoc.value = doc
     totalPages.value = doc.numPages
     currentVisiblePage.value = 1
+    docKey.value++
     await precomputePageDimensions()
     loading.value = false
     showToast(`加载成功，共 ${doc.numPages} 页`, 'success')
